@@ -354,7 +354,7 @@ class EquiformerV2_OC20(BaseModel):
 
 
     @conditional_grad(torch.enable_grad())
-    def forward(self, data):
+    def forward(self, data, return_latent = False, input_x_embedding = None):
         self.batch_size = len(data.natoms)
         self.dtype = data.pos.dtype
         self.device = data.pos.device
@@ -404,11 +404,17 @@ class EquiformerV2_OC20(BaseModel):
         # Initialize the l = 0, m = 0 coefficients for each resolution
         for i in range(self.num_resolutions):
             if self.num_resolutions == 1:
-                x.embedding[:, offset_res, :] = self.sphere_embedding(atomic_numbers)
+                if input_x_embedding is not None:
+                    x.embedding[:, offset_res, :] = input_x_embedding
+                else:
+                    x.embedding[:, offset_res, :] = self.sphere_embedding(atomic_numbers)
             else:
-                x.embedding[:, offset_res, :] = self.sphere_embedding(
-                    atomic_numbers
-                    )[:, offset : offset + self.sphere_channels]
+                if input_x_embedding is not None:
+                    x.embedding[:, offset_res, :] = input_x_embedding[:, offset : offset + self.sphere_channels]
+                else:
+                    x.embedding[:, offset_res, :] = self.sphere_embedding(
+                        atomic_numbers
+                        )[:, offset : offset + self.sphere_channels]
             offset = offset + self.sphere_channels
             offset_res = offset_res + int((self.lmax_list[i] + 1) ** 2)
 
@@ -463,8 +469,10 @@ class EquiformerV2_OC20(BaseModel):
                 edge_index)
             forces = forces.embedding.narrow(1, 1, 3)
             forces = forces.view(-1, 3)            
-            
-        if not self.regress_forces:
+
+        if return_latent:
+            return x.embedding
+        elif not self.regress_forces:
             return energy
         else:
             return energy, forces
